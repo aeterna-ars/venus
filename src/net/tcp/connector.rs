@@ -1,0 +1,37 @@
+use std::sync::Arc;
+
+use tokio::net::TcpStream;
+use tokio::time::timeout;
+
+use crate::error::TcpError;
+
+pub use crate::protocols::tcp::connection::TcpConnection;
+pub use crate::protocols::tcp::configs::{TcpClientConfig, TcpCommonConfig};
+
+pub struct TcpClient {
+    config: Arc<TcpClientConfig>,
+    conn: TcpStream,
+}
+
+impl TcpClient {
+    pub async fn connect(config: Arc<TcpClientConfig>) -> Result<Self, TcpError> {
+        let conn: TcpStream = timeout(config.conn_timeout_secs, TcpStream::connect(&config.dest_addr))
+            .await
+            .map_err(|_| TcpError::Timeout("connection timed out"))?
+            .map_err(|e| TcpError::Std(format!("connection error: {e}")))?;
+
+        Ok(Self {
+            config,
+            conn,
+        })
+    }
+
+    pub async fn handle(self) -> Result<TcpConnection, TcpError> {
+        let conn: TcpConnection = TcpConnection::new(
+            self.conn,
+            self.config.common.clone()
+        ).await?;
+
+        Ok(conn)
+    }
+}
